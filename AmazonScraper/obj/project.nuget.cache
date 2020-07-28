@@ -1,0 +1,22 @@
+{
+  "version": 2,
+  "dgSpecHash": "iZhuXue81fd0c/b1IUl2nKf+Olfq5FPjQr74vSl8mMP8OBxY0c2/J/xwW82e0uxXqz6mii4OU2LUUK8VOT5EMA==",
+  "success": true,
+  "projectFilePath": "C:\\Users\\Kazi Rahiv\\source\\repos\\AmazonScraper\\AmazonScraper\\AmazonScraper.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\Kazi Rahiv\\.nuget\\packages\\microsoft.extensions.configuration\\3.1.6\\microsoft.extensions.configuration.3.1.6.nupkg.sha512",
+    "C:\\Users\\Kazi Rahiv\\.nuget\\packages\\microsoft.extensions.configuration.abstractions\\3.1.6\\microsoft.extensions.configuration.abstractions.3.1.6.nupkg.sha512",
+    "C:\\Users\\Kazi Rahiv\\.nuget\\packages\\microsoft.extensions.configuration.binder\\3.1.6\\microsoft.extensions.configuration.binder.3.1.6.nupkg.sha512",
+    "C:\\Users\\Kazi Rahiv\\.nuget\\packages\\microsoft.extensions.configuration.fileextensions\\3.1.6\\microsoft.extensions.configuration.fileextensions.3.1.6.nupkg.sha512",
+    "C:\\Users\\Kazi Rahiv\\.nuget\\packages\\microsoft.extensions.configuration.json\\3.1.6\\microsoft.extensions.configuration.json.3.1.6.nupkg.sha512",
+    "C:\\Users\\Kazi Rahiv\\.nuget\\packages\\microsoft.extensions.fileproviders.abstractions\\3.1.6\\microsoft.extensions.fileproviders.abstractions.3.1.6.nupkg.sha512",
+    "C:\\Users\\Kazi Rahiv\\.nuget\\packages\\microsoft.extensions.fileproviders.physical\\3.1.6\\microsoft.extensions.fileproviders.physical.3.1.6.nupkg.sha512",
+    "C:\\Users\\Kazi Rahiv\\.nuget\\packages\\microsoft.extensions.filesystemglobbing\\3.1.6\\microsoft.extensions.filesystemglobbing.3.1.6.nupkg.sha512",
+    "C:\\Users\\Kazi Rahiv\\.nuget\\packages\\microsoft.extensions.primitives\\3.1.6\\microsoft.extensions.primitives.3.1.6.nupkg.sha512",
+    "C:\\Users\\Kazi Rahiv\\.nuget\\packages\\newtonsoft.json\\12.0.3\\newtonsoft.json.12.0.3.nupkg.sha512",
+    "C:\\Users\\Kazi Rahiv\\.nuget\\packages\\selenium.support\\3.141.0\\selenium.support.3.141.0.nupkg.sha512",
+    "C:\\Users\\Kazi Rahiv\\.nuget\\packages\\selenium.webdriver\\3.141.0\\selenium.webdriver.3.141.0.nupkg.sha512",
+    "C:\\Users\\Kazi Rahiv\\.nuget\\packages\\selenium.webdriver.chromedriver\\84.0.4147.3001\\selenium.webdriver.chromedriver.84.0.4147.3001.nupkg.sha512"
+  ],
+  "logs": []
+}

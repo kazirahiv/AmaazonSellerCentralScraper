@@ -3,9 +3,9 @@ using System.Collections.Generic;
 
 namespace AmazonScraper.Models
 {
-    public class Data
+    public class ScrapeData
     {
-        public Data()
+        public ScrapeData()
         {
             Reports = new List<Report>();
         }

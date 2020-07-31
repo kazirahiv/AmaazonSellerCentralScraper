@@ -6,10 +6,10 @@ namespace AmazonScraper.Models
     {
         public string ParentASIN { get; set; }
         public string ChildASIN { get; set; }
-        public string Sessions { get; set; }
-        public string UnitsOrdered { get; set; }
-        public string ProductSales { get; set; }
-        public string TotalOrderItems { get; set; }
+        public int Sessions { get; set; }
+        public int UnitsOrdered { get; set; }
+        public decimal ProductSales { get; set; }
+        public int TotalOrderItems { get; set; }
         public DateTime Date { get; set; }
 
         public override string ToString()

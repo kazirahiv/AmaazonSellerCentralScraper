@@ -3,7 +3,9 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 16
 VisualStudioVersion = 16.0.30204.135
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AmazonScraper", "AmazonScraper\AmazonScraper.csproj", "{EB9C596E-7F2C-45F7-8255-A490D0EC1CFC}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "AmazonScraper", "AmazonScraper\AmazonScraper.csproj", "{EB9C596E-7F2C-45F7-8255-A490D0EC1CFC}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Data", "Data\Data.csproj", "{E92CADAD-D4FC-4F50-959B-D7F6783F9F79}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -15,6 +17,10 @@ Global
 		{EB9C596E-7F2C-45F7-8255-A490D0EC1CFC}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{EB9C596E-7F2C-45F7-8255-A490D0EC1CFC}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{EB9C596E-7F2C-45F7-8255-A490D0EC1CFC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E92CADAD-D4FC-4F50-959B-D7F6783F9F79}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E92CADAD-D4FC-4F50-959B-D7F6783F9F79}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E92CADAD-D4FC-4F50-959B-D7F6783F9F79}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E92CADAD-D4FC-4F50-959B-D7F6783F9F79}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

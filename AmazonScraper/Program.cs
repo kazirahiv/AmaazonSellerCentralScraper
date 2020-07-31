@@ -1,10 +1,14 @@
 ﻿using AmazonScraper.Models;
+using Data;
+using Data.Models;
 using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
+using OfficeOpenXml;
 using OpenQA.Selenium;
 using OpenQA.Selenium.Chrome;
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -101,14 +105,14 @@ namespace AmazonScraper
 
         static void Main(string[] args)
         {
+            GenereateExcel();
+            #region Reading configurations from Json Files
             var options = new ChromeOptions();
             IConfiguration configuration = GetAppConfig();
             var section = configuration.GetSection("UserAuth");
             var emailFromConfig = section.GetValue<string>("Email");
             var passwordFromConfig = section.GetValue<string>("Password");
-
             IConfiguration scrapeInfo = GetScrapeInfo();
-
             string lastScrapedDateTimeString = string.Empty;
             DateTime lastScrapedDateTime = DateTime.MinValue;
             try
@@ -117,14 +121,13 @@ namespace AmazonScraper
                 lastScrapedDateTimeString = lastScrapedDateTime.ToString("dd-MMMM-yyyy");
             }
             catch { }
-
-
             if (!string.IsNullOrEmpty(emailFromConfig) && !string.IsNullOrEmpty(passwordFromConfig))
             {
                 Email = emailFromConfig;
                 Password = passwordFromConfig;
             }
             UnicorpURI = configuration.GetValue<string>("UnicorpURI");
+            #endregion
 
             using (var driver = new ChromeDriver(options))
             {
@@ -320,11 +323,10 @@ namespace AmazonScraper
                 }
 
 
+                #region Scraping Datatables From Datepicker Dates
                 int yearCount = 0;
                 var prevButton = driver.FindElementByXPath("/html/body/div[3]/div/a[1]");
-
                 bool prevButtonIsNotClickable = prevButton.GetAttribute("class").Contains("ui-state-disabled");
-
                 while (!prevButtonIsNotClickable)
                 {
                     string month = driver.FindElementByClassName("ui-datepicker-month").Text;
@@ -342,11 +344,7 @@ namespace AmazonScraper
                     prevButtonIsNotClickable = prevButton.GetAttribute("class").Contains("ui-state-disabled");
                     yearCount++;
                 }
-
-
-                Data data = new Data();
-
-
+                ScrapeData data = new ScrapeData();
                 for (int i = 0; i <= yearCount; i++)
                 {
                     string month = driver.FindElementByClassName("ui-datepicker-month").Text;
@@ -443,19 +441,19 @@ namespace AmazonScraper
                                         }
                                         else if (attributeValue.Contains("_AR_SC_MA_Sessions_25920"))
                                         {
-                                            report.Sessions = col.Text;
+                                            report.Sessions = int.Parse(col.Text);
                                         }
                                         else if (attributeValue.Contains("_AR_SC_MA_UnitsOrdered_40590"))
                                         {
-                                            report.UnitsOrdered = col.Text;
+                                            report.UnitsOrdered = int.Parse(col.Text);
                                         }
                                         else if (attributeValue.Contains("_AR_SC_MA_OrderedProductSales_40591"))
                                         {
-                                            report.ProductSales = col.Text;
+                                            report.ProductSales = decimal.Parse(col.Text.Replace("$", "").Replace(",", ""));
                                         }
                                         else if (attributeValue.Contains("_AR_SC_MA_TotalOrderItems_1"))
                                         {
-                                            report.TotalOrderItems = col.Text;
+                                            report.TotalOrderItems = int.Parse(col.Text);
                                         }
                                         else
                                         {
@@ -481,35 +479,45 @@ namespace AmazonScraper
                         nextButton.Click();
                     }
                 }
+                #endregion
 
 
-                #region Checking if UnicorpLTD is operational & Send scraped data.
+                FlagScrapeStatusToJson(true);
+
+                #region Send scraped data to DB
                 try
                 {
+                    ScrapeData jdata = GetScrapeDataFromJSONRecordFile();
 
-                    //Ping pingSender = new Ping();
-                    //PingReply reply = pingSender.Send(UnicorpURI);
-                    //if (reply.Status == IPStatus.Success)
-                    //{
-                    //    string result = AddProductToUnicorpAsync(data).Result;
-                    //    Console.WriteLine(result);
-                    //}
-                    //else
-                    //{
-                    //    Console.ForegroundColor = ConsoleColor.Red;
-                    //    Console.WriteLine("UnicorpLTD  is not live, Not sending the scraped informations.");
-                    //    Console.ResetColor();
-                    //    Thread.Sleep(TimeSpan.FromSeconds(5));
-                    //    Environment.Exit(0);
-                    //}
+                    if (jdata != null)
+                    {
+                        if (jdata.AllScrapedTillDate)
+                        {
+                            string result = AddProductToDB(jdata);
+                            Console.ForegroundColor = ConsoleColor.Green;
+                            Console.WriteLine(result);
+                            Thread.Sleep(TimeSpan.FromSeconds(2));
+                            Environment.Exit(0);
+                        }
+                        else
+                        {
+                            Console.ForegroundColor = ConsoleColor.Blue;
+                            Console.WriteLine("Not All Records Scraped Till Date ! Exitting ...");
+                            Console.ResetColor();
+                            Thread.Sleep(TimeSpan.FromSeconds(5));
+                            Environment.Exit(0);
+                        }
+                    }
+                    else
+                    {
+                        Console.ForegroundColor = ConsoleColor.Red;
+                        Console.WriteLine("Invalid JSON Records. Exitting ...");
+                        Console.ResetColor();
+                        Thread.Sleep(TimeSpan.FromSeconds(5));
+                        Environment.Exit(0);
 
-                    //Data data = new Data { Reports = reports, LastScraped = DateTime.Now };
-                    //string result = AddProductToUnicorpAsync(data).Result;
-                    //Console.ForegroundColor = ConsoleColor.Green;
-                    //Console.WriteLine(result);
-                    //Environment.Exit(0);
-                    //Thread.Sleep(TimeSpan.FromSeconds(5));
-                    //Environment.Exit(0);
+                    }
+
                 }
                 catch (Exception e)
                 {
@@ -524,14 +532,68 @@ namespace AmazonScraper
             }
         }
 
+
+        #region Helper Methods
         public static DateTime GetCurrentDatePickerDateTime(string day, string month, string year, ChromeDriver driver)
         {
 
             string date = day + "-" + month + "-" + year;
             return DateTime.ParseExact(date, "dd-MMMM-yyyy", CultureInfo.InvariantCulture);
         }
+        public static ScrapeData GetScrapeDataFromJSONRecordFile()
+        {
+            string startupPath = Directory.GetCurrentDirectory();
+            string collectionHistoryPath = Path.Combine(startupPath, "collections.json");
+            if (File.Exists(collectionHistoryPath))
+            {
+                string json = string.Empty;
+                using (StreamReader r = new StreamReader(collectionHistoryPath))
+                {
+                    json = r.ReadToEnd();
+                }
+                if (!string.IsNullOrEmpty(json))
+                {
+                    return JsonConvert.DeserializeObject<ScrapeData>(json);
 
-        public static void WriteToJson(Data data)
+                }
+                return null;
+            }
+            else
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine("JSON Record File Doesnt Exist. Exitting ....");
+                Console.ResetColor();
+                Thread.Sleep(TimeSpan.FromSeconds(3));
+                Environment.Exit(0);
+            }
+            return null;
+        }
+        public static void FlagScrapeStatusToJson(bool status)
+        {
+            string startupPath = Directory.GetCurrentDirectory();
+            string collectionHistoryPath = Path.Combine(startupPath, "collections.json");
+
+            if (File.Exists(collectionHistoryPath))
+            {
+                string json = string.Empty;
+                using (StreamReader r = new StreamReader(collectionHistoryPath))
+                {
+                    json = r.ReadToEnd();
+                }
+                if (!string.IsNullOrEmpty(json))
+                {
+                    ScrapeData jdata = JsonConvert.DeserializeObject<ScrapeData>(json);
+                    jdata.AllScrapedTillDate = status;
+                    var convertedJson = JsonConvert.SerializeObject(jdata, Formatting.Indented);
+                    File.WriteAllText(collectionHistoryPath, convertedJson);
+                    Console.ForegroundColor = ConsoleColor.Green;
+                    Console.WriteLine("Got all informations till date. Flagging as COMPLETED ");
+                    Console.ResetColor();
+                    Thread.Sleep(TimeSpan.FromSeconds(3));
+                }
+            }
+        }
+        public static void WriteToJson(ScrapeData data)
         {
             string startupPath = Directory.GetCurrentDirectory();
             string collectionHistoryPath = Path.Combine(startupPath, "collections.json");
@@ -555,7 +617,7 @@ namespace AmazonScraper
                 }
                 else
                 {
-                    Data jdata = JsonConvert.DeserializeObject<Data>(json);
+                    ScrapeData jdata = JsonConvert.DeserializeObject<ScrapeData>(json);
                     jdata.Reports = new List<Report>();
                     foreach (var report in data.Reports)
                     {
@@ -607,7 +669,122 @@ namespace AmazonScraper
             return new ConfigurationBuilder()
                     .AddJsonFile(configPath, optional: true, reloadOnChange: true).Build();
         }
-        public static async Task<string> AddProductToUnicorpAsync(Data data)
+        public static string AddProductToDB(ScrapeData data)
+        {
+            try
+            {
+                AmazonDBContext amazonDBContext = new AmazonDBContext();
+
+                var uniqueProductASINs =
+                    data.Reports
+                    .GroupBy(s => s.ChildASIN)
+                    .Select(s => new UniqueProductASIN { ChildAsinID = s.Key })
+                    .ToList();
+
+                var availableProductInfoOfDates =
+                    data.Reports
+                    .GroupBy(s => s.Date)
+                    .Select(s => new AvailableProductInfoOfDate { DatePickerDate = s.Key })
+                    .ToList();
+
+                if (amazonDBContext.AvailableProductInfoOfDates.Any())
+                {
+                    var productInfoOfDates = amazonDBContext.AvailableProductInfoOfDates.AsQueryable();
+                    var lastCollectionDateFromDB = productInfoOfDates.OrderByDescending(s => s.DatePickerDate).FirstOrDefault();
+                    var lastCollectionDateFromScraper = availableProductInfoOfDates.OrderByDescending(s => s.DatePickerDate).FirstOrDefault();
+                    if (lastCollectionDateFromScraper.DatePickerDate > lastCollectionDateFromDB.DatePickerDate)
+                    {
+                        foreach (var product in uniqueProductASINs)
+                        {
+                            amazonDBContext.UniqueProductASINs.Add(product);
+                        }
+                        foreach (var infoOfDate in availableProductInfoOfDates)
+                        {
+                            amazonDBContext.AvailableProductInfoOfDates.Add(infoOfDate);
+                        }
+                    }
+                    else
+                    {
+                        return "Already have informations till date. Not adding to database.";
+                    }
+                }
+                else
+                {
+
+                    foreach (var product in uniqueProductASINs)
+                    {
+                        amazonDBContext.UniqueProductASINs.Add(product);
+                    }
+                    foreach (var infoOfDate in availableProductInfoOfDates)
+                    {
+                        amazonDBContext.AvailableProductInfoOfDates.Add(infoOfDate);
+                    }
+                }
+                amazonDBContext.SaveChanges();
+
+                var childASINSessions =
+                    data.Reports
+                    .Select(x => new ChildASINSession
+                    {
+                        ChildASINId = amazonDBContext.UniqueProductASINs.FirstOrDefault(s => s.ChildAsinID == x.ChildASIN).Id,
+                        DateID = amazonDBContext.AvailableProductInfoOfDates.FirstOrDefault(s => s.DatePickerDate == x.Date).Id,
+                        SessionValue = x.Sessions
+                    }).ToList();
+
+
+                var unitsOrderedByAsinId =
+                    data.Reports
+                    .Select(x => new UnitsOrderedByASINID
+                    {
+                        ChildASINId = amazonDBContext.UniqueProductASINs.FirstOrDefault(s => s.ChildAsinID == x.ChildASIN).Id,
+                        DateID = amazonDBContext.AvailableProductInfoOfDates.FirstOrDefault(s => s.DatePickerDate == x.Date).Id,
+                        UnitsOrdered = x.UnitsOrdered
+                    }).ToList();
+
+
+                var productSalesByAsinId =
+                    data.Reports
+                    .Select(x => new ProductSalesByChildASINID
+                    {
+                        ChildASINId = amazonDBContext.UniqueProductASINs.FirstOrDefault(s => s.ChildAsinID == x.ChildASIN).Id,
+                        DateID = amazonDBContext.AvailableProductInfoOfDates.FirstOrDefault(s => s.DatePickerDate == x.Date).Id,
+                        Earning = x.ProductSales
+                    }).ToList();
+
+                var totlaOrderedItemsByAsinId =
+                    data.Reports
+                    .Select(x => new TotalOrderItemsByASINID
+                    {
+                        ChildASINId = amazonDBContext.UniqueProductASINs.FirstOrDefault(s => s.ChildAsinID == x.ChildASIN).Id,
+                        DateID = amazonDBContext.AvailableProductInfoOfDates.FirstOrDefault(s => s.DatePickerDate == x.Date).Id,
+                        TotalOrders = x.UnitsOrdered
+                    }).ToList();
+
+                foreach (var session in childASINSessions)
+                {
+                    amazonDBContext.ChildASINSessions.Add(session);
+                }
+                foreach (var unit in unitsOrderedByAsinId)
+                {
+                    amazonDBContext.UnitsOrderedByASINIDs.Add(unit);
+                }
+                foreach (var sales in productSalesByAsinId)
+                {
+                    amazonDBContext.ProductSalesByChildASINIDs.Add(sales);
+                }
+                foreach (var ordered in totlaOrderedItemsByAsinId)
+                {
+                    amazonDBContext.TotalOrderItemsByASINIDs.Add(ordered);
+                }
+                amazonDBContext.SaveChanges();
+                return "New Informations Added To Database";
+            }
+            catch
+            {
+                return "Error Connecting To Database";
+            }
+        }
+        public static async Task<string> AddProductToUnicorpAsync(ScrapeData data)
         {
             using (var client = new HttpClient())
             {
@@ -618,7 +795,7 @@ namespace AmazonScraper
 
 
                 var content = new StringContent(JsonConvert.SerializeObject(data).ToString(), Encoding.UTF8, "application/json");
-                var result = client.PostAsync("api/AddSalesCentralData", content).Result;
+                var result = client.PostAsync("api/AddSalesCentralScrapeData", content).Result;
                 if (result.IsSuccessStatusCode)
                 {
                     return await result.Content.ReadAsStringAsync();
@@ -626,5 +803,59 @@ namespace AmazonScraper
             }
             return "";
         }
+
+
+
+        public static void GenereateExcel()
+        {
+            string startupPath = Directory.GetCurrentDirectory();
+            string configPath = Path.Combine(startupPath, "test.xlsx");
+            using (ExcelPackage excel = new ExcelPackage())
+            {
+
+                //Add Worksheets in Excel file
+                excel.Workbook.Worksheets.Add("TestSheet1");
+
+
+                //Create Excel file in Uploads folder of your project
+                FileInfo excelFile = new FileInfo(configPath);
+
+                //Add header row columns name in string list array
+                var headerRow = new List<string[]>()
+                  {
+                    new string[] { "Full Name","Email" }
+                  };
+
+                // Get the header range
+                string Range = "A1:" + Char.ConvertFromUtf32(headerRow[0].Length + 64) + "1";
+
+                // get the workSheet in which you want to create header
+                var worksheet = excel.Workbook.Worksheets["TestSheet1"];
+
+                // Popular header row data
+                worksheet.Cells[Range].LoadFromArrays(headerRow);
+
+                //show header cells with different style
+                worksheet.Cells[Range].Style.Font.Bold = true;
+                worksheet.Cells[Range].Style.Font.Size = 16;
+                worksheet.Cells[Range].Style.Font.Color.SetColor(System.Drawing.Color.DarkBlue);
+
+                //Now add some data in rows for each column
+                var Data = new List<object[]>()
+                    {
+                      new object[] {"Test","test@gmail.com"},
+                      new object[] {"Test2","test2@gmail.com"},
+                      new object[] {"Test3","test3@gmail.com"},
+
+                    };
+
+                //add the data in worksheet, here .Cells[2,1] 2 is rowNumber while 1 is column number
+                worksheet.Cells[2, 1].LoadFromArrays(Data);
+
+                //Save Excel file
+                excel.SaveAs(excelFile);
+            }
+        }
+        #endregion
     }
 }

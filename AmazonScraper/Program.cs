@@ -105,9 +105,10 @@ namespace AmazonScraper
 
         static void Main(string[] args)
         {
-            GenereateExcel();
             #region Reading configurations from Json Files
             var options = new ChromeOptions();
+            ChromeDriverService service = ChromeDriverService.CreateDefaultService();
+            service.SuppressInitialDiagnosticInformation = true;
             IConfiguration configuration = GetAppConfig();
             var section = configuration.GetSection("UserAuth");
             var emailFromConfig = section.GetValue<string>("Email");
@@ -129,7 +130,7 @@ namespace AmazonScraper
             UnicorpURI = configuration.GetValue<string>("UnicorpURI");
             #endregion
 
-            using (var driver = new ChromeDriver(options))
+            using (var driver = new ChromeDriver(service, options))
             {
                 driver.Navigate().GoToUrl(baseUrl);
                 try
@@ -214,6 +215,7 @@ namespace AmazonScraper
                 driver.FindElementByName("email").SendKeys(Email);
                 driver.FindElementByName("password").SendKeys(Password);
                 driver.FindElementById("signInSubmit").Click();
+
                 #region Captcha
                 try
                 {
@@ -249,9 +251,10 @@ namespace AmazonScraper
                 }
                 catch (Exception e)
                 {
-                    Console.WriteLine(e.Message);
+                    //Console.WriteLine(e.Message);
                 }
                 #endregion
+
                 #region OTP
                 try
                 {
@@ -280,13 +283,28 @@ namespace AmazonScraper
                     driver.FindElementById("auth-mfa-otpcode").SendKeys(OTP);
                     driver.FindElementById("auth-signin-button").Click();
                     otpDone = true;
-
-
                 }
                 catch (Exception e)
                 {
                     Console.WriteLine(e.Message);
                 }
+
+
+                try
+                {
+                    var wrongOTPBox = driver.FindElement(By.Id("auth-error-message-box"));
+                    if (wrongOTPBox != null)
+                    {
+                        Console.ForegroundColor = ConsoleColor.Green;
+                        Console.WriteLine("Wrong OTP entered. Please close and restart the process ..");
+                        Environment.Exit(0);
+                    }
+                }
+                catch (Exception e)
+                {
+                    //Console.WriteLine(e.Message);
+                }
+
                 #endregion
 
                 Thread.Sleep(1000);
@@ -484,7 +502,7 @@ namespace AmazonScraper
 
                 FlagScrapeStatusToJson(true);
 
-                #region Send scraped data to DB
+                #region Send scraped data to DB And Generate Excel
                 try
                 {
                     ScrapeData jdata = GetScrapeDataFromJSONRecordFile();
@@ -496,6 +514,10 @@ namespace AmazonScraper
                             string result = AddProductToDB(jdata);
                             Console.ForegroundColor = ConsoleColor.Green;
                             Console.WriteLine(result);
+                            Console.WriteLine();
+                            Console.WriteLine("Generating Excel Document ...");
+                            GenereateExcel();
+                            Console.WriteLine("Done !");
                             Thread.Sleep(TimeSpan.FromSeconds(2));
                             Environment.Exit(0);
                         }
@@ -528,7 +550,12 @@ namespace AmazonScraper
                     Environment.Exit(0);
                 }
 
+
+
+
                 #endregion
+
+
             }
         }
 
@@ -674,26 +701,44 @@ namespace AmazonScraper
             try
             {
                 AmazonDBContext amazonDBContext = new AmazonDBContext();
-
-                var uniqueProductASINs =
-                    data.Reports
-                    .GroupBy(s => s.ChildASIN)
-                    .Select(s => new UniqueProductASIN { ChildAsinID = s.Key })
-                    .ToList();
-
-                var availableProductInfoOfDates =
-                    data.Reports
-                    .GroupBy(s => s.Date)
-                    .Select(s => new AvailableProductInfoOfDate { DatePickerDate = s.Key })
-                    .ToList();
-
-                if (amazonDBContext.AvailableProductInfoOfDates.Any())
+                if (amazonDBContext.Database.CanConnect() && amazonDBContext.Database.EnsureCreated())
                 {
-                    var productInfoOfDates = amazonDBContext.AvailableProductInfoOfDates.AsQueryable();
-                    var lastCollectionDateFromDB = productInfoOfDates.OrderByDescending(s => s.DatePickerDate).FirstOrDefault();
-                    var lastCollectionDateFromScraper = availableProductInfoOfDates.OrderByDescending(s => s.DatePickerDate).FirstOrDefault();
-                    if (lastCollectionDateFromScraper.DatePickerDate > lastCollectionDateFromDB.DatePickerDate)
+                    var uniqueProductASINs =
+                        data.Reports
+                        .GroupBy(s => s.ChildASIN)
+                        .Select(s => new UniqueProductASIN { ChildAsinID = s.Key })
+                        .ToList();
+
+                    var availableProductInfoOfDates =
+                        data.Reports
+                        .GroupBy(s => s.Date)
+                        .Select(s => new AvailableProductInfoOfDate { DatePickerDate = s.Key })
+                        .ToList();
+
+                    if (amazonDBContext.AvailableProductInfoOfDates.Any())
                     {
+                        var productInfoOfDates = amazonDBContext.AvailableProductInfoOfDates.AsQueryable();
+                        var lastCollectionDateFromDB = productInfoOfDates.OrderByDescending(s => s.DatePickerDate).FirstOrDefault();
+                        var lastCollectionDateFromScraper = availableProductInfoOfDates.OrderByDescending(s => s.DatePickerDate).FirstOrDefault();
+                        if (lastCollectionDateFromScraper.DatePickerDate > lastCollectionDateFromDB.DatePickerDate)
+                        {
+                            foreach (var product in uniqueProductASINs)
+                            {
+                                amazonDBContext.UniqueProductASINs.Add(product);
+                            }
+                            foreach (var infoOfDate in availableProductInfoOfDates)
+                            {
+                                amazonDBContext.AvailableProductInfoOfDates.Add(infoOfDate);
+                            }
+                        }
+                        else
+                        {
+                            return "Already have informations till date. Not adding to database.";
+                        }
+                    }
+                    else
+                    {
+
                         foreach (var product in uniqueProductASINs)
                         {
                             amazonDBContext.UniqueProductASINs.Add(product);
@@ -703,81 +748,69 @@ namespace AmazonScraper
                             amazonDBContext.AvailableProductInfoOfDates.Add(infoOfDate);
                         }
                     }
-                    else
+                    amazonDBContext.SaveChanges();
+
+                    var childASINSessions =
+                        data.Reports
+                        .Select(x => new ChildASINSession
+                        {
+                            ChildASINId = amazonDBContext.UniqueProductASINs.FirstOrDefault(s => s.ChildAsinID == x.ChildASIN).Id,
+                            DateID = amazonDBContext.AvailableProductInfoOfDates.FirstOrDefault(s => s.DatePickerDate == x.Date).Id,
+                            SessionValue = x.Sessions
+                        }).ToList();
+
+
+                    var unitsOrderedByAsinId =
+                        data.Reports
+                        .Select(x => new UnitsOrderedByASINID
+                        {
+                            ChildASINId = amazonDBContext.UniqueProductASINs.FirstOrDefault(s => s.ChildAsinID == x.ChildASIN).Id,
+                            DateID = amazonDBContext.AvailableProductInfoOfDates.FirstOrDefault(s => s.DatePickerDate == x.Date).Id,
+                            UnitsOrdered = x.UnitsOrdered
+                        }).ToList();
+
+
+                    var productSalesByAsinId =
+                        data.Reports
+                        .Select(x => new ProductSalesByChildASINID
+                        {
+                            ChildASINId = amazonDBContext.UniqueProductASINs.FirstOrDefault(s => s.ChildAsinID == x.ChildASIN).Id,
+                            DateID = amazonDBContext.AvailableProductInfoOfDates.FirstOrDefault(s => s.DatePickerDate == x.Date).Id,
+                            Earning = x.ProductSales
+                        }).ToList();
+
+                    var totlaOrderedItemsByAsinId =
+                        data.Reports
+                        .Select(x => new TotalOrderItemsByASINID
+                        {
+                            ChildASINId = amazonDBContext.UniqueProductASINs.FirstOrDefault(s => s.ChildAsinID == x.ChildASIN).Id,
+                            DateID = amazonDBContext.AvailableProductInfoOfDates.FirstOrDefault(s => s.DatePickerDate == x.Date).Id,
+                            TotalOrders = x.UnitsOrdered
+                        }).ToList();
+
+                    foreach (var session in childASINSessions)
                     {
-                        return "Already have informations till date. Not adding to database.";
+                        amazonDBContext.ChildASINSessions.Add(session);
                     }
+                    foreach (var unit in unitsOrderedByAsinId)
+                    {
+                        amazonDBContext.UnitsOrderedByASINIDs.Add(unit);
+                    }
+                    foreach (var sales in productSalesByAsinId)
+                    {
+                        amazonDBContext.ProductSalesByChildASINIDs.Add(sales);
+                    }
+                    foreach (var ordered in totlaOrderedItemsByAsinId)
+                    {
+                        amazonDBContext.TotalOrderItemsByASINIDs.Add(ordered);
+                    }
+                    amazonDBContext.SaveChanges();
+                    return "New Informations Added To Database";
                 }
                 else
                 {
-
-                    foreach (var product in uniqueProductASINs)
-                    {
-                        amazonDBContext.UniqueProductASINs.Add(product);
-                    }
-                    foreach (var infoOfDate in availableProductInfoOfDates)
-                    {
-                        amazonDBContext.AvailableProductInfoOfDates.Add(infoOfDate);
-                    }
+                    return "Error Storing Data";
                 }
-                amazonDBContext.SaveChanges();
-
-                var childASINSessions =
-                    data.Reports
-                    .Select(x => new ChildASINSession
-                    {
-                        ChildASINId = amazonDBContext.UniqueProductASINs.FirstOrDefault(s => s.ChildAsinID == x.ChildASIN).Id,
-                        DateID = amazonDBContext.AvailableProductInfoOfDates.FirstOrDefault(s => s.DatePickerDate == x.Date).Id,
-                        SessionValue = x.Sessions
-                    }).ToList();
-
-
-                var unitsOrderedByAsinId =
-                    data.Reports
-                    .Select(x => new UnitsOrderedByASINID
-                    {
-                        ChildASINId = amazonDBContext.UniqueProductASINs.FirstOrDefault(s => s.ChildAsinID == x.ChildASIN).Id,
-                        DateID = amazonDBContext.AvailableProductInfoOfDates.FirstOrDefault(s => s.DatePickerDate == x.Date).Id,
-                        UnitsOrdered = x.UnitsOrdered
-                    }).ToList();
-
-
-                var productSalesByAsinId =
-                    data.Reports
-                    .Select(x => new ProductSalesByChildASINID
-                    {
-                        ChildASINId = amazonDBContext.UniqueProductASINs.FirstOrDefault(s => s.ChildAsinID == x.ChildASIN).Id,
-                        DateID = amazonDBContext.AvailableProductInfoOfDates.FirstOrDefault(s => s.DatePickerDate == x.Date).Id,
-                        Earning = x.ProductSales
-                    }).ToList();
-
-                var totlaOrderedItemsByAsinId =
-                    data.Reports
-                    .Select(x => new TotalOrderItemsByASINID
-                    {
-                        ChildASINId = amazonDBContext.UniqueProductASINs.FirstOrDefault(s => s.ChildAsinID == x.ChildASIN).Id,
-                        DateID = amazonDBContext.AvailableProductInfoOfDates.FirstOrDefault(s => s.DatePickerDate == x.Date).Id,
-                        TotalOrders = x.UnitsOrdered
-                    }).ToList();
-
-                foreach (var session in childASINSessions)
-                {
-                    amazonDBContext.ChildASINSessions.Add(session);
-                }
-                foreach (var unit in unitsOrderedByAsinId)
-                {
-                    amazonDBContext.UnitsOrderedByASINIDs.Add(unit);
-                }
-                foreach (var sales in productSalesByAsinId)
-                {
-                    amazonDBContext.ProductSalesByChildASINIDs.Add(sales);
-                }
-                foreach (var ordered in totlaOrderedItemsByAsinId)
-                {
-                    amazonDBContext.TotalOrderItemsByASINIDs.Add(ordered);
-                }
-                amazonDBContext.SaveChanges();
-                return "New Informations Added To Database";
             }
             catch
             {
@@ -804,57 +837,141 @@ namespace AmazonScraper
             return "";
         }
 
-
-
         public static void GenereateExcel()
         {
+
+            AmazonDBContext amazonDBContext = new AmazonDBContext();
             string startupPath = Directory.GetCurrentDirectory();
-            string configPath = Path.Combine(startupPath, "test.xlsx");
-            using (ExcelPackage excel = new ExcelPackage())
+            string configPath = Path.Combine(startupPath, "AmazonScraper.xlsx");
+            FileInfo excelFile = new FileInfo(configPath);
+            ExcelPackage.LicenseContext = LicenseContext.NonCommercial;
+
+            if (amazonDBContext.Database.CanConnect())
             {
-
-                //Add Worksheets in Excel file
-                excel.Workbook.Worksheets.Add("TestSheet1");
-
-
-                //Create Excel file in Uploads folder of your project
-                FileInfo excelFile = new FileInfo(configPath);
-
-                //Add header row columns name in string list array
-                var headerRow = new List<string[]>()
-                  {
-                    new string[] { "Full Name","Email" }
-                  };
-
-                // Get the header range
-                string Range = "A1:" + Char.ConvertFromUtf32(headerRow[0].Length + 64) + "1";
-
-                // get the workSheet in which you want to create header
-                var worksheet = excel.Workbook.Worksheets["TestSheet1"];
-
-                // Popular header row data
-                worksheet.Cells[Range].LoadFromArrays(headerRow);
-
-                //show header cells with different style
-                worksheet.Cells[Range].Style.Font.Bold = true;
-                worksheet.Cells[Range].Style.Font.Size = 16;
-                worksheet.Cells[Range].Style.Font.Color.SetColor(System.Drawing.Color.DarkBlue);
-
-                //Now add some data in rows for each column
-                var Data = new List<object[]>()
+                using (ExcelPackage excel = new ExcelPackage())
+                {
+                    if (amazonDBContext.UniqueProductASINs.Any())
                     {
-                      new object[] {"Test","test@gmail.com"},
-                      new object[] {"Test2","test2@gmail.com"},
-                      new object[] {"Test3","test3@gmail.com"},
+                        #region Products Excel  
+                        excel.Workbook.Worksheets.Add("Products");
+                        var headerRowProducts = new List<string[]>()
+                          {
+                            new string[] { "ID","ChildASINId" }
+                          };
+                        string pRange = "A1:" + Char.ConvertFromUtf32(headerRowProducts[0].Length + 64) + "1";
+                        var worksheetProducts = excel.Workbook.Worksheets["Products"];
+                        worksheetProducts.Cells[pRange].LoadFromArrays(headerRowProducts);
+                        var pdata = new List<object[]>();
+                        foreach (var product in amazonDBContext.UniqueProductASINs.ToList())
+                        {
+                            pdata.Add(new object[] { product.Id, product.ChildAsinID });
+                        }
+                        worksheetProducts.Cells[2, 1].LoadFromArrays(pdata);
 
-                    };
+                        #endregion
+                    }
+                    if (amazonDBContext.AvailableProductInfoOfDates.Any())
+                    {
+                        #region DatePickerDates Excel  
+                        excel.Workbook.Worksheets.Add("DatePickerDates");
+                        var headerRowDates = new List<string[]>()
+                          {
+                            new string[] { "ID","Date" }
+                          };
+                        string dRange = "A1:" + Char.ConvertFromUtf32(headerRowDates[0].Length + 64) + "1";
+                        var worksheetDates = excel.Workbook.Worksheets["DatePickerDates"];
+                        worksheetDates.Cells[dRange].LoadFromArrays(headerRowDates);
+                        var ddata = new List<object[]>();
+                        foreach (var date in amazonDBContext.AvailableProductInfoOfDates.ToList())
+                        {
+                            ddata.Add(new object[] { date.Id, date.DatePickerDate.ToShortDateString() });
+                        }
+                        worksheetDates.Cells[2, 1].LoadFromArrays(ddata);
+                        #endregion
+                    }
+                    if (amazonDBContext.ChildASINSessions.Any())
+                    {
+                        #region Sessions Excel  
+                        excel.Workbook.Worksheets.Add("Sessions");
+                        var headerRowSession = new List<string[]>()
+                          {
+                            new string[] { "ID", "DateId", "ChildAsinId", "SessionValue" }
+                          };
+                        string sRange = "A1:" + Char.ConvertFromUtf32(headerRowSession[0].Length + 64) + "1";
+                        var worksheetSessions = excel.Workbook.Worksheets["Sessions"];
+                        worksheetSessions.Cells[sRange].LoadFromArrays(headerRowSession);
+                        var sdata = new List<object[]>();
+                        foreach (var session in amazonDBContext.ChildASINSessions.ToList())
+                        {
+                            sdata.Add(new object[] { session.Id, session.DateID, session.ChildASINId, session.SessionValue });
+                        }
+                        worksheetSessions.Cells[2, 1].LoadFromArrays(sdata);
+                        #endregion
+                    }
+                    if (amazonDBContext.ProductSalesByChildASINIDs.Any())
+                    {
+                        #region Product sales by ChildASIN
+                        excel.Workbook.Worksheets.Add("Product Sales By ChildASINId");
+                        var headerRowPSales = new List<string[]>()
+                        {
+                            new string[] { "ID", "DateId", "ChildAsinId", "Earning" }
+                        };
+                        string psRange = "A1:" + Char.ConvertFromUtf32(headerRowPSales[0].Length + 64) + "1";
+                        var worksheetProductSales = excel.Workbook.Worksheets["Product Sales By ChildASINId"];
+                        worksheetProductSales.Cells[psRange].LoadFromArrays(headerRowPSales);
+                        var psdata = new List<object[]>();
+                        foreach (var sales in amazonDBContext.ProductSalesByChildASINIDs.ToList())
+                        {
+                            psdata.Add(new object[] { sales.Id, sales.DateID, sales.ChildASINId, sales.Earning });
+                        }
+                        worksheetProductSales.Cells[2, 1].LoadFromArrays(psdata);
+                        #endregion
 
-                //add the data in worksheet, here .Cells[2,1] 2 is rowNumber while 1 is column number
-                worksheet.Cells[2, 1].LoadFromArrays(Data);
+                    }
+                    if (amazonDBContext.TotalOrderItemsByASINIDs.Any())
+                    {
+                        #region Ordered Items
+                        excel.Workbook.Worksheets.Add("Ordered Items");
+                        var ordItemsHeaderRow = new List<string[]>()
+                  {
+                    new string[] { "ID", "DateId", "ChildAsinId", "Total Orders" }
+                  };
+                        string oIRange = "A1:" + Char.ConvertFromUtf32(ordItemsHeaderRow[0].Length + 64) + "1";
+                        var worksheetOrderedItems = excel.Workbook.Worksheets["Ordered Items"];
+                        worksheetOrderedItems.Cells[oIRange].LoadFromArrays(ordItemsHeaderRow);
+                        var oIData = new List<object[]>();
+                        foreach (var sales in amazonDBContext.TotalOrderItemsByASINIDs.ToList())
+                        {
+                            oIData.Add(new object[] { sales.Id, sales.DateID, sales.ChildASINId, sales.TotalOrders });
+                        }
+                        worksheetOrderedItems.Cells[2, 1].LoadFromArrays(oIData);
+                        #endregion
 
-                //Save Excel file
-                excel.SaveAs(excelFile);
+                    }
+                    if (amazonDBContext.UnitsOrderedByASINIDs.Any())
+                    {
+                        #region Units Ordered
+                        excel.Workbook.Worksheets.Add("Units Ordered");
+                        var unitsOrderedHeaderRow = new List<string[]>()
+                  {
+                    new string[] { "ID", "DateId", "ChildAsinId", "Units Ordered" }
+                  };
+                        string uORange = "A1:" + Char.ConvertFromUtf32(unitsOrderedHeaderRow[0].Length + 64) + "1";
+                        var worksheetUnitsOrdered = excel.Workbook.Worksheets["Units Ordered"];
+                        worksheetUnitsOrdered.Cells[uORange].LoadFromArrays(unitsOrderedHeaderRow);
+                        var uOData = new List<object[]>();
+                        foreach (var sales in amazonDBContext.UnitsOrderedByASINIDs.ToList())
+                        {
+                            uOData.Add(new object[] { sales.Id, sales.DateID, sales.ChildASINId, sales.UnitsOrdered });
+                        }
+                        worksheetUnitsOrdered.Cells[2, 1].LoadFromArrays(uOData);
+
+                        #endregion
+                    }
+                    excel.SaveAs(excelFile);
+                }
             }
+
         }
         #endregion
     }

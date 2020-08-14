@@ -140,8 +140,23 @@ namespace AmazonScraper
                 }
                 catch (Exception e)
                 {
-                    driver.FindElementById("sign-in-button").Click();
-                    Console.WriteLine(e.Message);
+                    try
+                    {
+
+                        driver.FindElementById("sign-in-button").Click();
+                    }
+                    catch
+                    {
+                        try
+                        {
+                            var signInButton = driver.FindElementByXPath("/html/body/div/div[1]/div/div/div[1]/div[1]/div/div/div[2]/div/div[2]/div[1]/div[1]/div/a/strong");
+                            signInButton.Click();
+                        }
+                        catch
+                        {
+                            Console.WriteLine(e.Message);
+                        }
+                    }
                 }
 
                 if (string.IsNullOrEmpty(Email) || string.IsNullOrEmpty(Password))
@@ -314,61 +329,29 @@ namespace AmazonScraper
                 Thread.Sleep(2000);
                 driver.FindElement(By.CssSelector("#report_DetailSalesTrafficByChildItem")).Click();
 
-                try
-                {
-                    Thread.Sleep(2000);
-                    driver.FindElement(By.CssSelector("#fromDate2")).Click();
 
-                }
-                catch
-                {
-                    try
-                    {
-                        driver.FindElement(By.CssSelector("#report_DetailSalesTrafficByChildItem")).Click();
-                        Thread.Sleep(2000);
-                        driver.FindElement(By.CssSelector("#fromDate2")).Click();
-                    }
-                    catch
-                    {
-
-                        Console.ForegroundColor = ConsoleColor.Red;
-                        Console.WriteLine("Network error, Exiting ...");
-                        Console.ResetColor();
-                        Thread.Sleep(TimeSpan.FromSeconds(5));
-                        Environment.Exit(0);
-                    }
-
-                }
 
 
                 #region Scraping Datatables From Datepicker Dates
+
+                TryClickFromDatePicker(driver);
                 int yearCount = 0;
                 var prevButton = driver.FindElementByXPath("/html/body/div[3]/div/a[1]");
                 bool prevButtonIsNotClickable = prevButton.GetAttribute("class").Contains("ui-state-disabled");
                 while (!prevButtonIsNotClickable)
                 {
-                    string month = driver.FindElementByClassName("ui-datepicker-month").Text;
-                    string year = driver.FindElementByClassName("ui-datepicker-year").Text;
-                    if (!string.IsNullOrEmpty(lastScrapedDateTimeString))
-                    {
-                        string[] date = lastScrapedDateTimeString.Split('-');
-                        if (month == date[1] && year == date[2])
-                        {
-                            break;
-                        }
-                    }
                     prevButton.Click();
                     prevButton = driver.FindElementByXPath("/html/body/div[3]/div/a[1]");
                     prevButtonIsNotClickable = prevButton.GetAttribute("class").Contains("ui-state-disabled");
                     yearCount++;
                 }
-                ScrapeData data = new ScrapeData();
                 for (int i = 0; i <= yearCount; i++)
                 {
                     string month = driver.FindElementByClassName("ui-datepicker-month").Text;
                     string year = driver.FindElementByClassName("ui-datepicker-year").Text;
                     var datePickerTable = driver.FindElementByXPath("/html/body/div[3]/table");
                     var availableDates = driver.FindElements(By.XPath("//*[@class='ui-datepicker-calendar']/tbody/tr/td/a[contains(@class, 'ui-state-default')]")).ToList();
+                    bool roaster = false;
                     for (int j = 0; j < availableDates.Count; j++)
                     {
                         string day = String.Empty;
@@ -378,113 +361,36 @@ namespace AmazonScraper
                         {
                             day = '0' + day;
                         }
+
+
                         var curDay = GetCurrentDatePickerDateTime(day, month, year, driver);
+
+
                         if (curDay > lastScrapedDateTime)
                         {
-                            availableDates[j].Click();
-                            try
+                            if (!roaster)
                             {
-                                Thread.Sleep(1000);
-                                var element = driver.FindElement(By.XPath("//*[@id=\"fromDate2\"]"));
-                                element.Click();
-                            }
-                            catch
-                            {
-                                try
-                                {
-                                    Thread.Sleep(10000);
-                                    var element = driver.FindElement(By.XPath("//*[@id=\"fromDate2\"]"));
-                                    element.Click();
-                                }
-                                catch
-                                {
-                                    try
-                                    {
-                                        Thread.Sleep(20000);
-                                        var element = driver.FindElement(By.XPath("//*[@id=\"fromDate2\"]"));
-                                        element.Click();
-                                    }
-                                    catch
-                                    {
-                                        try
-                                        {
-                                            Thread.Sleep(TimeSpan.FromMinutes(1));
-                                            var element = driver.FindElement(By.XPath("//*[@id=\"fromDate2\"]"));
-                                            element.Click();
-                                        }
-                                        catch
-                                        {
-                                            try
-                                            {
-                                                Thread.Sleep(TimeSpan.FromMinutes(2));
-                                                var element = driver.FindElement(By.XPath("//*[@id=\"fromDate2\"]"));
-                                                element.Click();
-                                            }
-                                            catch
-                                            {
-                                                Console.ForegroundColor = ConsoleColor.Red;
-                                                Console.WriteLine("Network issue occured. Writing all datas scraped till now.");
-                                                Console.ResetColor();
-                                                data.AllScrapedTillDate = false;
-                                            }
-                                        }
-                                    }
+                                availableDates[j].Click();
 
-                                }
+                                ClickThisDayInDatePickerTo(driver, curDay);
+
+                                TryClickFromDatePicker(driver);
+                                roaster = true;
                             }
+                            else
+                            {
+                                ClickThisDayInDatePickerTo(driver, curDay);
+                                TryClickFromDatePicker(driver);
+                                availableDates = driver.FindElements(By.XPath("//*[@class='ui-datepicker-calendar']/tbody/tr/td/a[contains(@class, 'ui-state-default')]")).ToList();
+                                availableDates[j].Click();
+
+                            }
+
+
+
                             Thread.Sleep(2000);
                             #region Scrape the table of selected date 
-                            var table = driver.FindElementByCssSelector("#dataTable > tbody:nth-child(3)");
-                            var tElements = table.FindElements(By.TagName("tr"));
-                            foreach (var rows in tElements)
-                            {
-                                if (rows.FindElements(By.TagName("td")) != null && rows.FindElements(By.TagName("td")).Count > 0)
-                                {
-                                    Report report = new Report();
-                                    foreach (var col in rows.FindElements(By.TagName("td")))
-                                    {
-                                        //Opting the check input col because we don't need that 
-                                        var attributeValue = col.GetAttribute("class");
-                                        if (attributeValue.Contains("cbCell"))
-                                        {
-                                            continue;
-                                        }
-                                        else if (attributeValue.Contains("_AR_SC_MA_ParentASIN_25990"))
-                                        {
-                                            report.ParentASIN = col.Text;
-                                        }
-                                        else if (attributeValue.Contains("_AR_SC_MA_ChildASIN_25991"))
-                                        {
-                                            report.ChildASIN = col.Text;
-                                        }
-                                        else if (attributeValue.Contains("_AR_SC_MA_Sessions_25920"))
-                                        {
-                                            report.Sessions = int.Parse(col.Text);
-                                        }
-                                        else if (attributeValue.Contains("_AR_SC_MA_UnitsOrdered_40590"))
-                                        {
-                                            report.UnitsOrdered = int.Parse(col.Text);
-                                        }
-                                        else if (attributeValue.Contains("_AR_SC_MA_OrderedProductSales_40591"))
-                                        {
-                                            report.ProductSales = decimal.Parse(col.Text.Replace("$", "").Replace(",", ""));
-                                        }
-                                        else if (attributeValue.Contains("_AR_SC_MA_TotalOrderItems_1"))
-                                        {
-                                            report.TotalOrderItems = int.Parse(col.Text);
-                                        }
-                                        else
-                                        {
-                                            //None 
-                                        }
-                                    }
-                                    report.Date = curDay;
-                                    data.LastScraped = DateTime.Now;
-                                    data.LastScrapedDatePickerTime = curDay;
-                                    data.Reports.Add(report);
-                                    WriteToJson(data);
-                                }
-                            }
+                            ScrapeDataTable(driver, curDay);
                         }
                         #endregion
                         availableDates = driver.FindElements(By.XPath("//*[@class='ui-datepicker-calendar']/tbody/tr/td/a")).ToList();
@@ -495,6 +401,8 @@ namespace AmazonScraper
                     if (!nextButtonIsClickable)
                     {
                         nextButton.Click();
+                        Thread.Sleep(1000);
+                        ClickToDateNextButton(driver);
                     }
                 }
                 #endregion
@@ -558,6 +466,240 @@ namespace AmazonScraper
 
             }
         }
+
+        private static void ScrapeDataTable(ChromeDriver driver, DateTime curDay)
+        {
+            ScrapeData data = new ScrapeData();
+            var table = driver.FindElementByCssSelector("#dataTable > tbody:nth-child(3)");
+            var tElements = table.FindElements(By.TagName("tr"));
+            foreach (var rows in tElements)
+            {
+                if (rows.FindElements(By.TagName("td")) != null && rows.FindElements(By.TagName("td")).Count > 0)
+                {
+                    Report report = new Report();
+                    foreach (var col in rows.FindElements(By.TagName("td")))
+                    {
+                        //Opting the check input col because we don't need that 
+                        var attributeValue = col.GetAttribute("class");
+                        if (attributeValue.Contains("cbCell"))
+                        {
+                            continue;
+                        }
+                        else if (attributeValue.Contains("_AR_SC_MA_ParentASIN_25990"))
+                        {
+                            report.ParentASIN = col.Text;
+                        }
+                        else if (attributeValue.Contains("_AR_SC_MA_ChildASIN_25991"))
+                        {
+                            report.ChildASIN = col.Text;
+                        }
+                        else if (attributeValue.Contains("_AR_SC_MA_Sessions_25920"))
+                        {
+                            report.Sessions = int.Parse(Regex.Replace(col.Text, @"[^0-9a-zA-Z]+", ""));
+                        }
+                        else if (attributeValue.Contains("_AR_SC_MA_UnitsOrdered_40590"))
+                        {
+                            report.UnitsOrdered = int.Parse(Regex.Replace(col.Text, @"[^0-9a-zA-Z]+", ""));
+                        }
+                        else if (attributeValue.Contains("_AR_SC_MA_OrderedProductSales_40591"))
+                        {
+                            report.ProductSales = decimal.Parse(Regex.Replace(col.Text, @"[^0-9a-zA-Z]+", ""));
+                        }
+                        else if (attributeValue.Contains("_AR_SC_MA_TotalOrderItems_1"))
+                        {
+                            report.TotalOrderItems = int.Parse(Regex.Replace(col.Text, @"[^0-9a-zA-Z]+", ""));
+                        }
+                        else
+                        {
+                            //None 
+                        }
+                    }
+                    report.Date = curDay;
+                    data.LastScraped = DateTime.Now;
+                    data.LastScrapedDatePickerTime = curDay;
+                    data.Reports.Add(report);
+                    WriteToJson(data);
+                }
+            }
+        }
+
+        private static void TryClickFromDatePicker(ChromeDriver driver)
+        {
+            try
+            {
+                Thread.Sleep(1000);
+                var element = driver.FindElement(By.XPath("//*[@id=\"fromDate2\"]"));
+                element.Click();
+            }
+            catch
+            {
+                try
+                {
+                    Thread.Sleep(10000);
+                    var element = driver.FindElement(By.XPath("//*[@id=\"fromDate2\"]"));
+                    element.Click();
+                }
+                catch
+                {
+                    try
+                    {
+                        Thread.Sleep(20000);
+                        var element = driver.FindElement(By.XPath("//*[@id=\"fromDate2\"]"));
+                        element.Click();
+                    }
+                    catch
+                    {
+                        try
+                        {
+                            Thread.Sleep(TimeSpan.FromMinutes(1));
+                            var element = driver.FindElement(By.XPath("//*[@id=\"fromDate2\"]"));
+                            element.Click();
+                        }
+                        catch
+                        {
+                            try
+                            {
+                                Thread.Sleep(TimeSpan.FromMinutes(2));
+                                var element = driver.FindElement(By.XPath("//*[@id=\"fromDate2\"]"));
+                                element.Click();
+                            }
+                            catch
+                            {
+                                Console.ForegroundColor = ConsoleColor.Red;
+                                Console.WriteLine("Network issue occured. Writing all datas scraped till now.");
+                                Console.ResetColor();
+                            }
+                        }
+                    }
+
+                }
+            }
+        }
+
+
+        private static void TryClickToDatePicker(ChromeDriver driver)
+        {
+            try
+            {
+                Thread.Sleep(1000);
+                var element = driver.FindElement(By.XPath("//*[@id=\"toDate2\"]"));
+                element.Click();
+            }
+            catch
+            {
+                try
+                {
+                    Thread.Sleep(10000);
+                    var element = driver.FindElement(By.XPath("//*[@id=\"toDate2\"]"));
+                    element.Click();
+                }
+                catch
+                {
+                    try
+                    {
+                        Thread.Sleep(20000);
+                        var element = driver.FindElement(By.XPath("//*[@id=\"toDate2\"]"));
+                        element.Click();
+                    }
+                    catch
+                    {
+                        try
+                        {
+                            Thread.Sleep(TimeSpan.FromMinutes(1));
+                            var element = driver.FindElement(By.XPath("//*[@id=\"toDate2\"]"));
+                            element.Click();
+                        }
+                        catch
+                        {
+                            try
+                            {
+                                Thread.Sleep(TimeSpan.FromMinutes(2));
+                                var element = driver.FindElement(By.XPath("//*[@id=\"toDate2\"]"));
+                                element.Click();
+                            }
+                            catch
+                            {
+                                Console.ForegroundColor = ConsoleColor.Red;
+                                Console.WriteLine("Network issue occured. Writing all datas scraped till now.");
+                                Console.ResetColor();
+                            }
+                        }
+                    }
+
+                }
+            }
+        }
+
+        private static void ClickToDateNextButton(ChromeDriver driver)
+        {
+            TryClickToDatePicker(driver);
+            var nextButton = driver.FindElementByXPath("/html/body/div[3]/div/a[2]");
+            bool nextButtonIsClickable = nextButton.GetAttribute("class").Contains("ui-state-disabled");
+
+            if (!nextButtonIsClickable)
+            {
+                nextButton.Click();
+            }
+            TryClickFromDatePicker(driver);
+        }
+
+        private static void ClickThisDayInDatePickerTo(ChromeDriver driver, DateTime curDayDPFrom)
+        {
+            TryClickToDatePicker(driver);
+            int yearCount = 0;
+            var prevButton = driver.FindElementByXPath("/html/body/div[3]/div/a[1]");
+            bool prevButtonIsNotClickable = prevButton.GetAttribute("class").Contains("ui-state-disabled");
+            while (!prevButtonIsNotClickable)
+            {
+                prevButton.Click();
+                prevButton = driver.FindElementByXPath("/html/body/div[3]/div/a[1]");
+                prevButtonIsNotClickable = prevButton.GetAttribute("class").Contains("ui-state-disabled");
+                yearCount++;
+            }
+
+            for (int i = 0; i <= yearCount; i++)
+            {
+                string month = driver.FindElementByClassName("ui-datepicker-month").Text;
+                string year = driver.FindElementByClassName("ui-datepicker-year").Text;
+                var availableDates = driver.FindElements(By.XPath("//*[@class='ui-datepicker-calendar']/tbody/tr/td/a[contains(@class, 'ui-state-default')]")).ToList();
+                for (int j = 0; j < availableDates.Count; j++)
+                {
+                    string day = String.Empty;
+                    day = availableDates[j].Text;
+
+                    if (day.Length == 1)
+                    {
+                        day = '0' + day;
+                    }
+                    try
+                    {
+                        var curDay = GetCurrentDatePickerDateTime(day, month, year, driver);
+                        if (curDay == curDayDPFrom)
+                        {
+                            availableDates[j].Click();
+                            TryClickFromDatePicker(driver);
+                            return;
+                        }
+                    }
+                    catch
+                    {
+                        month = driver.FindElementByClassName("ui-datepicker-month").Text;
+                        year = driver.FindElementByClassName("ui-datepicker-year").Text;
+                        availableDates = driver.FindElements(By.XPath("//*[@class='ui-datepicker-calendar']/tbody/tr/td/a[contains(@class, 'ui-state-default')]")).ToList();
+                        day = availableDates[j].Text;
+                        var curDay = GetCurrentDatePickerDateTime(day, month, year, driver);
+                        if (curDay == curDayDPFrom)
+                        {
+                            availableDates[j].Click();
+                            TryClickFromDatePicker(driver);
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+
+
 
 
         #region Helper Methods

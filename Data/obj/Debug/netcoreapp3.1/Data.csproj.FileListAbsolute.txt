@@ -10,3 +10,15 @@ C:\Users\Kazi Rahiv\source\repos\AmazonScraper\Data\obj\Debug\netcoreapp3.1\Data
 C:\Users\Kazi Rahiv\source\repos\AmazonScraper\Data\obj\Debug\netcoreapp3.1\Data.genruntimeconfig.cache
 C:\Users\Kazi Rahiv\source\repos\AmazonScraper\Data\obj\Debug\netcoreapp3.1\Data.csprojAssemblyReference.cache
 C:\Users\Kazi Rahiv\source\repos\AmazonScraper\Data\obj\Debug\netcoreapp3.1\Data.csproj.CoreCompileInputs.cache
+D:\AmaazonSellerCentralScraper\Data\bin\Debug\netcoreapp3.1\Data.deps.json
+D:\AmaazonSellerCentralScraper\Data\bin\Debug\netcoreapp3.1\Data.runtimeconfig.json
+D:\AmaazonSellerCentralScraper\Data\bin\Debug\netcoreapp3.1\Data.runtimeconfig.dev.json
+D:\AmaazonSellerCentralScraper\Data\bin\Debug\netcoreapp3.1\Data.dll
+D:\AmaazonSellerCentralScraper\Data\bin\Debug\netcoreapp3.1\Data.pdb
+D:\AmaazonSellerCentralScraper\Data\obj\Debug\netcoreapp3.1\Data.csprojAssemblyReference.cache
+D:\AmaazonSellerCentralScraper\Data\obj\Debug\netcoreapp3.1\Data.AssemblyInfoInputs.cache
+D:\AmaazonSellerCentralScraper\Data\obj\Debug\netcoreapp3.1\Data.AssemblyInfo.cs
+D:\AmaazonSellerCentralScraper\Data\obj\Debug\netcoreapp3.1\Data.csproj.CoreCompileInputs.cache
+D:\AmaazonSellerCentralScraper\Data\obj\Debug\netcoreapp3.1\Data.dll
+D:\AmaazonSellerCentralScraper\Data\obj\Debug\netcoreapp3.1\Data.pdb
+D:\AmaazonSellerCentralScraper\Data\obj\Debug\netcoreapp3.1\Data.genruntimeconfig.cache

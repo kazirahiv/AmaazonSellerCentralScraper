@@ -6648,11 +6648,11 @@
   "project": {
     "version": "1.0.0",
     "restore": {
-      "projectUniqueName": "C:\\Users\\Kazi Rahiv\\source\\repos\\AmazonScraper\\AmazonScraper\\AmazonScraper.csproj",
+      "projectUniqueName": "D:\\AmaazonSellerCentralScraper\\AmazonScraper\\AmazonScraper.csproj",
       "projectName": "AmazonScraper",
-      "projectPath": "C:\\Users\\Kazi Rahiv\\source\\repos\\AmazonScraper\\AmazonScraper\\AmazonScraper.csproj",
+      "projectPath": "D:\\AmaazonSellerCentralScraper\\AmazonScraper\\AmazonScraper.csproj",
       "packagesPath": "C:\\Users\\Kazi Rahiv\\.nuget\\packages\\",
-      "outputPath": "C:\\Users\\Kazi Rahiv\\source\\repos\\AmazonScraper\\AmazonScraper\\obj\\",
+      "outputPath": "D:\\AmaazonSellerCentralScraper\\AmazonScraper\\obj\\",
       "projectStyle": "PackageReference",
       "configFilePaths": [
         "C:\\Users\\Kazi Rahiv\\AppData\\Roaming\\NuGet\\NuGet.Config",
@@ -6668,8 +6668,8 @@
       "frameworks": {
         "netcoreapp3.1": {
           "projectReferences": {
-            "C:\\Users\\Kazi Rahiv\\source\\repos\\AmazonScraper\\Data\\Data.csproj": {
-              "projectPath": "C:\\Users\\Kazi Rahiv\\source\\repos\\AmazonScraper\\Data\\Data.csproj"
+            "D:\\AmaazonSellerCentralScraper\\Data\\Data.csproj": {
+              "projectPath": "D:\\AmaazonSellerCentralScraper\\Data\\Data.csproj"
             }
           }
         }

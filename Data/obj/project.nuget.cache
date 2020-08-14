@@ -1,8 +1,8 @@
 {
   "version": 2,
-  "dgSpecHash": "0gw1HYeWlCAte0ulWr/Slh9rppkZXZSb6M+ywb9rmBoXrCWUgT1j6uhyct5C0Nwg5jGAsxpW6fIj46Ih5bpKfA==",
+  "dgSpecHash": "ibTaGhjtieLLpKZwPxUy7O7tOGG5rPtBaNOJgrvw5vmmAstFF3ltG+tHdrw+H2Q5aa90IpSDO6/jvHHqgWBrPg==",
   "success": true,
-  "projectFilePath": "C:\\Users\\Kazi Rahiv\\source\\repos\\AmazonScraper\\Data\\Data.csproj",
+  "projectFilePath": "D:\\AmaazonSellerCentralScraper\\Data\\Data.csproj",
   "expectedPackageFiles": [
     "C:\\Users\\Kazi Rahiv\\.nuget\\packages\\epplus\\5.2.1\\epplus.5.2.1.nupkg.sha512",
     "C:\\Users\\Kazi Rahiv\\.nuget\\packages\\microsoft.bcl.asyncinterfaces\\1.1.1\\microsoft.bcl.asyncinterfaces.1.1.1.nupkg.sha512",

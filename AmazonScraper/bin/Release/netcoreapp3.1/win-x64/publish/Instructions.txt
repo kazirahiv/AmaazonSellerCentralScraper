@@ -1,0 +1,2 @@
+Put your email and password into scraperSettings.json so that you dont have to put 
+them in terminal everytime.

@@ -14,7 +14,7 @@ namespace Data
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         {
-            optionsBuilder.UseSqlServer(@"Server=.\SQLEXPRESS;Database=AmazonScraperDB;Trusted_Connection=True;");
+            optionsBuilder.UseSqlite(@"Filename = AmazonDB.db");
         }
     }
 }

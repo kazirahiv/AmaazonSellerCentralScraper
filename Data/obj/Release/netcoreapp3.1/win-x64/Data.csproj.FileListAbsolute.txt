@@ -1,0 +1,12 @@
+D:\AmaazonSellerCentralScraper\Data\bin\Release\netcoreapp3.1\win-x64\Data.deps.json
+D:\AmaazonSellerCentralScraper\Data\bin\Release\netcoreapp3.1\win-x64\Data.runtimeconfig.json
+D:\AmaazonSellerCentralScraper\Data\bin\Release\netcoreapp3.1\win-x64\Data.runtimeconfig.dev.json
+D:\AmaazonSellerCentralScraper\Data\bin\Release\netcoreapp3.1\win-x64\Data.dll
+D:\AmaazonSellerCentralScraper\Data\bin\Release\netcoreapp3.1\win-x64\Data.pdb
+D:\AmaazonSellerCentralScraper\Data\obj\Release\netcoreapp3.1\win-x64\Data.csprojAssemblyReference.cache
+D:\AmaazonSellerCentralScraper\Data\obj\Release\netcoreapp3.1\win-x64\Data.AssemblyInfoInputs.cache
+D:\AmaazonSellerCentralScraper\Data\obj\Release\netcoreapp3.1\win-x64\Data.AssemblyInfo.cs
+D:\AmaazonSellerCentralScraper\Data\obj\Release\netcoreapp3.1\win-x64\Data.csproj.CoreCompileInputs.cache
+D:\AmaazonSellerCentralScraper\Data\obj\Release\netcoreapp3.1\win-x64\Data.dll
+D:\AmaazonSellerCentralScraper\Data\obj\Release\netcoreapp3.1\win-x64\Data.pdb
+D:\AmaazonSellerCentralScraper\Data\obj\Release\netcoreapp3.1\win-x64\Data.genruntimeconfig.cache

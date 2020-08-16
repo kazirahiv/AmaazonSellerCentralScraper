@@ -1,4 +1,5 @@
 ﻿using AmazonScraper.Models;
+using AmazonScraper.Models.JSONModels;
 using Data;
 using Data.Models;
 using Microsoft.Extensions.Configuration;
@@ -118,10 +119,20 @@ namespace AmazonScraper
             DateTime lastScrapedDateTime = DateTime.MinValue;
             try
             {
-                lastScrapedDateTime = scrapeInfo.GetValue<DateTime>("LastScrapedDatePickerTime");
-                lastScrapedDateTimeString = lastScrapedDateTime.ToString("dd-MMMM-yyyy");
+                if (!string.IsNullOrEmpty(scrapeInfo.GetValue<string>("LastScrapedDatePickerTime")))
+                {
+                    lastScrapedDateTime = scrapeInfo.GetValue<DateTime>("LastScrapedDatePickerTime");
+                }
+                else
+                {
+                    lastScrapedDateTime = GetDateTime("14", "August", "2018");
+                }
+
             }
-            catch { }
+            catch
+            {
+                lastScrapedDateTime = GetDateTime("14", "August", "2018");
+            }
             if (!string.IsNullOrEmpty(emailFromConfig) && !string.IsNullOrEmpty(passwordFromConfig))
             {
                 Email = emailFromConfig;
@@ -322,91 +333,32 @@ namespace AmazonScraper
 
                 #endregion
 
-                Thread.Sleep(1000);
-                driver.FindElement(By.CssSelector("#sc-navtab-reports")).Click();
-                Thread.Sleep(2000);
-                driver.FindElement(By.CssSelector("#sc-navtab-reports > ul:nth-child(2) > li:nth-child(2) > a:nth-child(1)")).Click();
-                Thread.Sleep(2000);
-                driver.FindElement(By.CssSelector("#report_DetailSalesTrafficByChildItem")).Click();
+
+                var scrapeToDate = DateTime.Now;
 
 
-
-
-                #region Scraping Datatables From Datepicker Dates
-
-                TryClickFromDatePicker(driver);
-                int yearCount = 0;
-                var prevButton = driver.FindElementByXPath("/html/body/div[3]/div/a[1]");
-                bool prevButtonIsNotClickable = prevButton.GetAttribute("class").Contains("ui-state-disabled");
-                while (!prevButtonIsNotClickable)
+                while (lastScrapedDateTime < scrapeToDate)
                 {
-                    prevButton.Click();
-                    prevButton = driver.FindElementByXPath("/html/body/div[3]/div/a[1]");
-                    prevButtonIsNotClickable = prevButton.GetAttribute("class").Contains("ui-state-disabled");
-                    yearCount++;
-                }
-                for (int i = 0; i <= yearCount; i++)
-                {
-                    string month = driver.FindElementByClassName("ui-datepicker-month").Text;
-                    string year = driver.FindElementByClassName("ui-datepicker-year").Text;
-                    var datePickerTable = driver.FindElementByXPath("/html/body/div[3]/table");
-                    var availableDates = driver.FindElements(By.XPath("//*[@class='ui-datepicker-calendar']/tbody/tr/td/a[contains(@class, 'ui-state-default')]")).ToList();
-                    bool roaster = false;
-                    for (int j = 0; j < availableDates.Count; j++)
+                    string date = lastScrapedDateTime.ToString("MM/dd/yyyy");
+
+                    var url = "https://sellercentral.amazon.com/gp/site-metrics/load-report-JSON.html/ref=au_xx_cont_sitereport?sortColumn=12&filterFromDate=" + date + "&filterToDate=" + date + "&fromDate=" + date + "&toDate=" + date + "&cols=/c0/c1/c2/c3/c4/c5/c6/c7/c8/c9/c10/c11&reportID=102:DetailSalesTrafficByChildItem&sortIsAscending=0&currentPage=0&dateUnit=1&viewDateUnits=ALL&runDate=";
+
+                    driver.Navigate().GoToUrl(url);
+
+
+                    try
                     {
-                        string day = String.Empty;
-                        day = availableDates[j].Text;
-
-                        if (day.Length == 1)
-                        {
-                            day = '0' + day;
-                        }
-
-
-                        var curDay = GetCurrentDatePickerDateTime(day, month, year, driver);
-
-
-                        if (curDay > lastScrapedDateTime)
-                        {
-                            if (!roaster)
-                            {
-                                availableDates[j].Click();
-
-                                ClickThisDayInDatePickerTo(driver, curDay);
-
-                                TryClickFromDatePicker(driver);
-                                roaster = true;
-                            }
-                            else
-                            {
-                                ClickThisDayInDatePickerTo(driver, curDay);
-                                TryClickFromDatePicker(driver);
-                                availableDates = driver.FindElements(By.XPath("//*[@class='ui-datepicker-calendar']/tbody/tr/td/a[contains(@class, 'ui-state-default')]")).ToList();
-                                availableDates[j].Click();
-
-                            }
-
-
-
-                            Thread.Sleep(2000);
-                            #region Scrape the table of selected date 
-                            ScrapeDataTable(driver, curDay);
-                        }
-                        #endregion
-                        availableDates = driver.FindElements(By.XPath("//*[@class='ui-datepicker-calendar']/tbody/tr/td/a")).ToList();
+                        var json = driver.FindElementById("sc-content-container").Text;
+                        var deserializedJSON = JsonConvert.DeserializeObject<ReportJSON>(json);
+                        var rows = deserializedJSON.data.rows;
+                        ScrapeDataTable(rows, lastScrapedDateTime);
                     }
-                    var nextButton = driver.FindElementByXPath("/html/body/div[3]/div/a[2]");
-                    bool nextButtonIsClickable = nextButton.GetAttribute("class").Contains("ui-state-disabled");
+                    catch { }
 
-                    if (!nextButtonIsClickable)
-                    {
-                        nextButton.Click();
-                        Thread.Sleep(1000);
-                        ClickToDateNextButton(driver);
-                    }
+
+
+                    lastScrapedDateTime = lastScrapedDateTime.AddDays(1);
                 }
-                #endregion
-
 
                 FlagScrapeStatusToJson(true);
 
@@ -419,8 +371,10 @@ namespace AmazonScraper
                     {
                         if (jdata.AllScrapedTillDate)
                         {
-                            string result = AddProductToDB(jdata);
                             Console.ForegroundColor = ConsoleColor.Green;
+                            Console.WriteLine("Storing about " + jdata.Reports.Count + " Records, Please wait ..");
+                            string result = AddProductToDB(jdata);
+                            Console.WriteLine(jdata.Reports.Count + " Records stored to AmazonDB.db !");
                             Console.WriteLine(result);
                             Console.WriteLine();
                             Console.WriteLine("Generating Excel Document ...");
@@ -467,248 +421,44 @@ namespace AmazonScraper
             }
         }
 
-        private static void ScrapeDataTable(ChromeDriver driver, DateTime curDay)
+        private static void ScrapeDataTable(List<List<string>> rows, DateTime date)
         {
-            ScrapeData data = new ScrapeData();
-            var table = driver.FindElementByCssSelector("#dataTable > tbody:nth-child(3)");
-            var tElements = table.FindElements(By.TagName("tr"));
-            foreach (var rows in tElements)
+            if (rows.Count > 0)
             {
-                if (rows.FindElements(By.TagName("td")) != null && rows.FindElements(By.TagName("td")).Count > 0)
+                ScrapeData data = new ScrapeData();
+                foreach (var cols in rows)
                 {
                     Report report = new Report();
-                    foreach (var col in rows.FindElements(By.TagName("td")))
-                    {
-                        //Opting the check input col because we don't need that 
-                        var attributeValue = col.GetAttribute("class");
-                        if (attributeValue.Contains("cbCell"))
-                        {
-                            continue;
-                        }
-                        else if (attributeValue.Contains("_AR_SC_MA_ParentASIN_25990"))
-                        {
-                            report.ParentASIN = col.Text;
-                        }
-                        else if (attributeValue.Contains("_AR_SC_MA_ChildASIN_25991"))
-                        {
-                            report.ChildASIN = col.Text;
-                        }
-                        else if (attributeValue.Contains("_AR_SC_MA_Sessions_25920"))
-                        {
-                            report.Sessions = int.Parse(Regex.Replace(col.Text, @"[^0-9a-zA-Z]+", ""));
-                        }
-                        else if (attributeValue.Contains("_AR_SC_MA_UnitsOrdered_40590"))
-                        {
-                            report.UnitsOrdered = int.Parse(Regex.Replace(col.Text, @"[^0-9a-zA-Z]+", ""));
-                        }
-                        else if (attributeValue.Contains("_AR_SC_MA_OrderedProductSales_40591"))
-                        {
-                            report.ProductSales = decimal.Parse(Regex.Replace(col.Text, @"[^0-9a-zA-Z]+", ""));
-                        }
-                        else if (attributeValue.Contains("_AR_SC_MA_TotalOrderItems_1"))
-                        {
-                            report.TotalOrderItems = int.Parse(Regex.Replace(col.Text, @"[^0-9a-zA-Z]+", ""));
-                        }
-                        else
-                        {
-                            //None 
-                        }
-                    }
-                    report.Date = curDay;
+                    report.ParentASIN = cols[0];
+                    report.ChildASIN = cols[1];
+                    report.Sessions = int.Parse(Regex.Replace(cols[3], @"[^0-9a-zA-Z]+", ""));
+                    report.UnitsOrdered = int.Parse(Regex.Replace(cols[8], @"[^0-9a-zA-Z]+", ""));
+                    report.ProductSales = decimal.Parse(Regex.Replace(cols[10], @"[^0-9a-zA-Z]+", ""));
+                    report.TotalOrderItems = int.Parse(Regex.Replace(cols[11], @"[^0-9a-zA-Z]+", ""));
+                    report.Date = date;
                     data.LastScraped = DateTime.Now;
-                    data.LastScrapedDatePickerTime = curDay;
+                    data.LastScrapedDatePickerTime = date;
                     data.Reports.Add(report);
-                    WriteToJson(data);
                 }
-            }
-        }
 
-        private static void TryClickFromDatePicker(ChromeDriver driver)
-        {
-            try
-            {
-                Thread.Sleep(1000);
-                var element = driver.FindElement(By.XPath("//*[@id=\"fromDate2\"]"));
-                element.Click();
-            }
-            catch
-            {
-                try
-                {
-                    Thread.Sleep(10000);
-                    var element = driver.FindElement(By.XPath("//*[@id=\"fromDate2\"]"));
-                    element.Click();
-                }
-                catch
-                {
-                    try
-                    {
-                        Thread.Sleep(20000);
-                        var element = driver.FindElement(By.XPath("//*[@id=\"fromDate2\"]"));
-                        element.Click();
-                    }
-                    catch
-                    {
-                        try
-                        {
-                            Thread.Sleep(TimeSpan.FromMinutes(1));
-                            var element = driver.FindElement(By.XPath("//*[@id=\"fromDate2\"]"));
-                            element.Click();
-                        }
-                        catch
-                        {
-                            try
-                            {
-                                Thread.Sleep(TimeSpan.FromMinutes(2));
-                                var element = driver.FindElement(By.XPath("//*[@id=\"fromDate2\"]"));
-                                element.Click();
-                            }
-                            catch
-                            {
-                                Console.ForegroundColor = ConsoleColor.Red;
-                                Console.WriteLine("Network issue occured. Writing all datas scraped till now.");
-                                Console.ResetColor();
-                            }
-                        }
-                    }
-
-                }
-            }
-        }
-
-
-        private static void TryClickToDatePicker(ChromeDriver driver)
-        {
-            try
-            {
-                Thread.Sleep(1000);
-                var element = driver.FindElement(By.XPath("//*[@id=\"toDate2\"]"));
-                element.Click();
-            }
-            catch
-            {
-                try
-                {
-                    Thread.Sleep(10000);
-                    var element = driver.FindElement(By.XPath("//*[@id=\"toDate2\"]"));
-                    element.Click();
-                }
-                catch
-                {
-                    try
-                    {
-                        Thread.Sleep(20000);
-                        var element = driver.FindElement(By.XPath("//*[@id=\"toDate2\"]"));
-                        element.Click();
-                    }
-                    catch
-                    {
-                        try
-                        {
-                            Thread.Sleep(TimeSpan.FromMinutes(1));
-                            var element = driver.FindElement(By.XPath("//*[@id=\"toDate2\"]"));
-                            element.Click();
-                        }
-                        catch
-                        {
-                            try
-                            {
-                                Thread.Sleep(TimeSpan.FromMinutes(2));
-                                var element = driver.FindElement(By.XPath("//*[@id=\"toDate2\"]"));
-                                element.Click();
-                            }
-                            catch
-                            {
-                                Console.ForegroundColor = ConsoleColor.Red;
-                                Console.WriteLine("Network issue occured. Writing all datas scraped till now.");
-                                Console.ResetColor();
-                            }
-                        }
-                    }
-
-                }
-            }
-        }
-
-        private static void ClickToDateNextButton(ChromeDriver driver)
-        {
-            TryClickToDatePicker(driver);
-            var nextButton = driver.FindElementByXPath("/html/body/div[3]/div/a[2]");
-            bool nextButtonIsClickable = nextButton.GetAttribute("class").Contains("ui-state-disabled");
-
-            if (!nextButtonIsClickable)
-            {
-                nextButton.Click();
-            }
-            TryClickFromDatePicker(driver);
-        }
-
-        private static void ClickThisDayInDatePickerTo(ChromeDriver driver, DateTime curDayDPFrom)
-        {
-            TryClickToDatePicker(driver);
-            int yearCount = 0;
-            var prevButton = driver.FindElementByXPath("/html/body/div[3]/div/a[1]");
-            bool prevButtonIsNotClickable = prevButton.GetAttribute("class").Contains("ui-state-disabled");
-            while (!prevButtonIsNotClickable)
-            {
-                prevButton.Click();
-                prevButton = driver.FindElementByXPath("/html/body/div[3]/div/a[1]");
-                prevButtonIsNotClickable = prevButton.GetAttribute("class").Contains("ui-state-disabled");
-                yearCount++;
+                WriteToJson(data);
             }
 
-            for (int i = 0; i <= yearCount; i++)
-            {
-                string month = driver.FindElementByClassName("ui-datepicker-month").Text;
-                string year = driver.FindElementByClassName("ui-datepicker-year").Text;
-                var availableDates = driver.FindElements(By.XPath("//*[@class='ui-datepicker-calendar']/tbody/tr/td/a[contains(@class, 'ui-state-default')]")).ToList();
-                for (int j = 0; j < availableDates.Count; j++)
-                {
-                    string day = String.Empty;
-                    day = availableDates[j].Text;
-
-                    if (day.Length == 1)
-                    {
-                        day = '0' + day;
-                    }
-                    try
-                    {
-                        var curDay = GetCurrentDatePickerDateTime(day, month, year, driver);
-                        if (curDay == curDayDPFrom)
-                        {
-                            availableDates[j].Click();
-                            TryClickFromDatePicker(driver);
-                            return;
-                        }
-                    }
-                    catch
-                    {
-                        month = driver.FindElementByClassName("ui-datepicker-month").Text;
-                        year = driver.FindElementByClassName("ui-datepicker-year").Text;
-                        availableDates = driver.FindElements(By.XPath("//*[@class='ui-datepicker-calendar']/tbody/tr/td/a[contains(@class, 'ui-state-default')]")).ToList();
-                        day = availableDates[j].Text;
-                        var curDay = GetCurrentDatePickerDateTime(day, month, year, driver);
-                        if (curDay == curDayDPFrom)
-                        {
-                            availableDates[j].Click();
-                            TryClickFromDatePicker(driver);
-                            return;
-                        }
-                    }
-                }
-            }
+            Thread.Sleep(1000);
         }
 
 
 
 
         #region Helper Methods
-        public static DateTime GetCurrentDatePickerDateTime(string day, string month, string year, ChromeDriver driver)
+        public static DateTime GetDateTime(string day, string month, string year)
         {
 
             string date = day + "-" + month + "-" + year;
             return DateTime.ParseExact(date, "dd-MMMM-yyyy", CultureInfo.InvariantCulture);
         }
+
+
         public static ScrapeData GetScrapeDataFromJSONRecordFile()
         {
             string startupPath = Directory.GetCurrentDirectory();
@@ -774,20 +524,9 @@ namespace AmazonScraper
             }
             else
             {
-                string json = string.Empty;
-                using (StreamReader r = new StreamReader(collectionHistoryPath))
+                ScrapeData jdata = GetScrapeDataFromJSONRecordFile();
+                if (jdata != null)
                 {
-                    json = r.ReadToEnd();
-                }
-                if (string.IsNullOrEmpty(json))
-                {
-                    json = JsonConvert.SerializeObject(data, Formatting.Indented);
-                    File.WriteAllText(collectionHistoryPath, json);
-                }
-                else
-                {
-                    ScrapeData jdata = JsonConvert.DeserializeObject<ScrapeData>(json);
-                    jdata.Reports = new List<Report>();
                     foreach (var report in data.Reports)
                     {
                         jdata.Reports.Add(report);
@@ -798,6 +537,13 @@ namespace AmazonScraper
                     var convertedJson = JsonConvert.SerializeObject(jdata, Formatting.Indented);
                     File.WriteAllText(collectionHistoryPath, convertedJson);
                 }
+                else
+                {
+                    var json = JsonConvert.SerializeObject(data, Formatting.Indented);
+                    File.WriteAllText(collectionHistoryPath, json);
+
+                }
+
             }
         }
         static IConfiguration GetAppConfig()
@@ -843,27 +589,46 @@ namespace AmazonScraper
             try
             {
                 AmazonDBContext amazonDBContext = new AmazonDBContext();
-                if (amazonDBContext.Database.CanConnect() && amazonDBContext.Database.EnsureCreated())
+                if (amazonDBContext.Database.EnsureCreated())
                 {
-                    var uniqueProductASINs =
-                        data.Reports
-                        .GroupBy(s => s.ChildASIN)
-                        .Select(s => new UniqueProductASIN { ChildAsinID = s.Key })
-                        .ToList();
-
-                    var availableProductInfoOfDates =
-                        data.Reports
-                        .GroupBy(s => s.Date)
-                        .Select(s => new AvailableProductInfoOfDate { DatePickerDate = s.Key })
-                        .ToList();
-
-                    if (amazonDBContext.AvailableProductInfoOfDates.Any())
+                    if (amazonDBContext.Database.CanConnect())
                     {
-                        var productInfoOfDates = amazonDBContext.AvailableProductInfoOfDates.AsQueryable();
-                        var lastCollectionDateFromDB = productInfoOfDates.OrderByDescending(s => s.DatePickerDate).FirstOrDefault();
-                        var lastCollectionDateFromScraper = availableProductInfoOfDates.OrderByDescending(s => s.DatePickerDate).FirstOrDefault();
-                        if (lastCollectionDateFromScraper.DatePickerDate > lastCollectionDateFromDB.DatePickerDate)
+                        var uniqueProductASINs =
+                            data.Reports
+                            .GroupBy(s => s.ChildASIN)
+                            .Select(s => new UniqueProductASIN { ChildAsinID = s.Key })
+                            .ToList();
+
+                        var availableProductInfoOfDates =
+                            data.Reports
+                            .GroupBy(s => s.Date)
+                            .Select(s => new AvailableProductInfoOfDate { DatePickerDate = s.Key })
+                            .ToList();
+
+                        if (amazonDBContext.AvailableProductInfoOfDates.Any())
                         {
+                            var productInfoOfDates = amazonDBContext.AvailableProductInfoOfDates.AsQueryable();
+                            var lastCollectionDateFromDB = productInfoOfDates.OrderByDescending(s => s.DatePickerDate).FirstOrDefault();
+                            var lastCollectionDateFromScraper = availableProductInfoOfDates.OrderByDescending(s => s.DatePickerDate).FirstOrDefault();
+                            if (lastCollectionDateFromScraper.DatePickerDate > lastCollectionDateFromDB.DatePickerDate)
+                            {
+                                foreach (var product in uniqueProductASINs)
+                                {
+                                    amazonDBContext.UniqueProductASINs.Add(product);
+                                }
+                                foreach (var infoOfDate in availableProductInfoOfDates)
+                                {
+                                    amazonDBContext.AvailableProductInfoOfDates.Add(infoOfDate);
+                                }
+                            }
+                            else
+                            {
+                                return "Already have informations till date. Not adding to database.";
+                            }
+                        }
+                        else
+                        {
+
                             foreach (var product in uniqueProductASINs)
                             {
                                 amazonDBContext.UniqueProductASINs.Add(product);
@@ -873,85 +638,73 @@ namespace AmazonScraper
                                 amazonDBContext.AvailableProductInfoOfDates.Add(infoOfDate);
                             }
                         }
-                        else
+                        amazonDBContext.SaveChanges();
+
+                        var childASINSessions =
+                            data.Reports
+                            .Select(x => new ChildASINSession
+                            {
+                                ChildASINId = amazonDBContext.UniqueProductASINs.FirstOrDefault(s => s.ChildAsinID == x.ChildASIN).Id,
+                                DateID = amazonDBContext.AvailableProductInfoOfDates.FirstOrDefault(s => s.DatePickerDate == x.Date).Id,
+                                SessionValue = x.Sessions
+                            }).ToList();
+
+
+                        var unitsOrderedByAsinId =
+                            data.Reports
+                            .Select(x => new UnitsOrderedByASINID
+                            {
+                                ChildASINId = amazonDBContext.UniqueProductASINs.FirstOrDefault(s => s.ChildAsinID == x.ChildASIN).Id,
+                                DateID = amazonDBContext.AvailableProductInfoOfDates.FirstOrDefault(s => s.DatePickerDate == x.Date).Id,
+                                UnitsOrdered = x.UnitsOrdered
+                            }).ToList();
+
+
+                        var productSalesByAsinId =
+                            data.Reports
+                            .Select(x => new ProductSalesByChildASINID
+                            {
+                                ChildASINId = amazonDBContext.UniqueProductASINs.FirstOrDefault(s => s.ChildAsinID == x.ChildASIN).Id,
+                                DateID = amazonDBContext.AvailableProductInfoOfDates.FirstOrDefault(s => s.DatePickerDate == x.Date).Id,
+                                Earning = x.ProductSales
+                            }).ToList();
+
+                        var totlaOrderedItemsByAsinId =
+                            data.Reports
+                            .Select(x => new TotalOrderItemsByASINID
+                            {
+                                ChildASINId = amazonDBContext.UniqueProductASINs.FirstOrDefault(s => s.ChildAsinID == x.ChildASIN).Id,
+                                DateID = amazonDBContext.AvailableProductInfoOfDates.FirstOrDefault(s => s.DatePickerDate == x.Date).Id,
+                                TotalOrders = x.UnitsOrdered
+                            }).ToList();
+
+                        foreach (var session in childASINSessions)
                         {
-                            return "Already have informations till date. Not adding to database.";
+                            amazonDBContext.ChildASINSessions.Add(session);
                         }
+                        foreach (var unit in unitsOrderedByAsinId)
+                        {
+                            amazonDBContext.UnitsOrderedByASINIDs.Add(unit);
+                        }
+                        foreach (var sales in productSalesByAsinId)
+                        {
+                            amazonDBContext.ProductSalesByChildASINIDs.Add(sales);
+                        }
+                        foreach (var ordered in totlaOrderedItemsByAsinId)
+                        {
+                            amazonDBContext.TotalOrderItemsByASINIDs.Add(ordered);
+                        }
+                        amazonDBContext.SaveChanges();
+                        return "New Informations Added To Database";
                     }
                     else
                     {
-
-                        foreach (var product in uniqueProductASINs)
-                        {
-                            amazonDBContext.UniqueProductASINs.Add(product);
-                        }
-                        foreach (var infoOfDate in availableProductInfoOfDates)
-                        {
-                            amazonDBContext.AvailableProductInfoOfDates.Add(infoOfDate);
-                        }
+                        return "Error Storing Data";
                     }
-                    amazonDBContext.SaveChanges();
-
-                    var childASINSessions =
-                        data.Reports
-                        .Select(x => new ChildASINSession
-                        {
-                            ChildASINId = amazonDBContext.UniqueProductASINs.FirstOrDefault(s => s.ChildAsinID == x.ChildASIN).Id,
-                            DateID = amazonDBContext.AvailableProductInfoOfDates.FirstOrDefault(s => s.DatePickerDate == x.Date).Id,
-                            SessionValue = x.Sessions
-                        }).ToList();
-
-
-                    var unitsOrderedByAsinId =
-                        data.Reports
-                        .Select(x => new UnitsOrderedByASINID
-                        {
-                            ChildASINId = amazonDBContext.UniqueProductASINs.FirstOrDefault(s => s.ChildAsinID == x.ChildASIN).Id,
-                            DateID = amazonDBContext.AvailableProductInfoOfDates.FirstOrDefault(s => s.DatePickerDate == x.Date).Id,
-                            UnitsOrdered = x.UnitsOrdered
-                        }).ToList();
-
-
-                    var productSalesByAsinId =
-                        data.Reports
-                        .Select(x => new ProductSalesByChildASINID
-                        {
-                            ChildASINId = amazonDBContext.UniqueProductASINs.FirstOrDefault(s => s.ChildAsinID == x.ChildASIN).Id,
-                            DateID = amazonDBContext.AvailableProductInfoOfDates.FirstOrDefault(s => s.DatePickerDate == x.Date).Id,
-                            Earning = x.ProductSales
-                        }).ToList();
-
-                    var totlaOrderedItemsByAsinId =
-                        data.Reports
-                        .Select(x => new TotalOrderItemsByASINID
-                        {
-                            ChildASINId = amazonDBContext.UniqueProductASINs.FirstOrDefault(s => s.ChildAsinID == x.ChildASIN).Id,
-                            DateID = amazonDBContext.AvailableProductInfoOfDates.FirstOrDefault(s => s.DatePickerDate == x.Date).Id,
-                            TotalOrders = x.UnitsOrdered
-                        }).ToList();
-
-                    foreach (var session in childASINSessions)
-                    {
-                        amazonDBContext.ChildASINSessions.Add(session);
-                    }
-                    foreach (var unit in unitsOrderedByAsinId)
-                    {
-                        amazonDBContext.UnitsOrderedByASINIDs.Add(unit);
-                    }
-                    foreach (var sales in productSalesByAsinId)
-                    {
-                        amazonDBContext.ProductSalesByChildASINIDs.Add(sales);
-                    }
-                    foreach (var ordered in totlaOrderedItemsByAsinId)
-                    {
-                        amazonDBContext.TotalOrderItemsByASINIDs.Add(ordered);
-                    }
-                    amazonDBContext.SaveChanges();
-                    return "New Informations Added To Database";
                 }
                 else
                 {
-                    return "Error Storing Data";
+                    return "Error Creating Database";
                 }
             }
             catch
